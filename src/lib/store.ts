@@ -1,13 +1,8 @@
 import { create } from 'zustand';
-import { db, User, Product, Sale } from './api-client';
+import { db, User, Product, Sale, CartItem } from './api-client';
 
 // Re-export types
 export type { User, Product, Sale, CartItem } from './api-client';
-
-export interface CartItem {
-  product: Product;
-  quantity: number;
-}
 
 interface AppState {
   // Auth
@@ -45,7 +40,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   initApp: async () => {
     try {
-      await db.init();
       const user = await db.getCurrentUser();
       set({ user, isLoading: false, isInitialized: true });
     } catch (error) {

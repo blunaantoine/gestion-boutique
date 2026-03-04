@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { db, Product, Sale, User } from '@/lib/api-client';
 import { useAppStore } from '@/lib/store';
 import { formatPrice } from '@/lib/currency';
@@ -24,6 +24,64 @@ import {
   PieChart, AlertTriangle, CheckCircle, Image as ImageIcon, X, Upload, Camera, Scan, KeyRound, Eye, EyeOff, Printer, Download, FileText, Bluetooth, Wifi, WifiOff, Settings, Server
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, LineChart, Line, Legend } from 'recharts';
+import { Html5QrcodeScanner, Html5QrcodeScanType } from 'html5-qrcode';
+
+// ============ BARCODE SCANNER COMPONENT ============
+function BarcodeScanner({ onScan, onClose }: { onScan: (barcode: string) => void; onClose: () => void }) {
+  const scannerRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!scannerRef.current) return;
+
+    const scanner = new Html5QrcodeScanner(
+      'barcode-scanner',
+      {
+        fps: 10,
+        qrbox: { width: 250, height: 150 },
+        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+        rememberLastUsedCamera: true,
+      },
+      false
+    );
+
+    scanner.render(
+      (decodedText) => {
+        onScan(decodedText);
+        scanner.clear().catch(console.error);
+      },
+      (errorMessage) => {
+        // Ignore frequent errors, only show critical ones
+        if (errorMessage.includes('NotAllowedError')) {
+          setError('Accès à la caméra refusé. Veuillez autoriser l\'accès à la caméra.');
+        }
+      }
+    ).catch((err) => {
+      setError('Impossible d\'accéder à la caméra. Vérifiez les permissions.');
+      console.error('Scanner error:', err);
+    });
+
+    return () => {
+      scanner.clear().catch(console.error);
+    };
+  }, [onScan]);
+
+  return (
+    <div className="space-y-4">
+      <div id="barcode-scanner" ref={scannerRef} className="w-full">
+        {/* Scanner will be rendered here */}
+      </div>
+      {error && (
+        <div className="p-4 bg-red-50 dark:bg-red-950/30 rounded-lg text-red-700 dark:text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground text-center">
+        Pointez la caméra vers le code-barres du produit
+      </p>
+    </div>
+  );
+}
 
 // ============ SERVER CONFIG COMPONENT ============
 function ServerConfigDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -659,6 +717,7 @@ function POSSystem() {
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'MOBILE_MONEY'>('CASH');
   const [processing, setProcessing] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [lastSale, setLastSale] = useState<{
     id: string;
     totalAmount: number;
@@ -666,6 +725,11 @@ function POSSystem() {
     createdAt: string;
     items: { product: { name: string }; quantity: number; unitPrice: number }[];
   } | null>(null);
+  
+  // Ref for USB barcode scanner input
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const barcodeBuffer = useRef<string>('');
+  const barcodeTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const loadProducts = async () => {
@@ -677,6 +741,67 @@ function POSSystem() {
     };
     loadProducts();
   }, [user]);
+
+  // USB Barcode Scanner Support (listens for rapid keyboard input)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only listen if not in an input field
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Clear existing timeout
+      if (barcodeTimeout.current) {
+        clearTimeout(barcodeTimeout.current);
+      }
+
+      // Add key to buffer
+      if (e.key.length === 1) {
+        barcodeBuffer.current += e.key;
+      }
+
+      // Check for Enter key (end of barcode)
+      if (e.key === 'Enter' && barcodeBuffer.current.length > 3) {
+        const barcode = barcodeBuffer.current.trim();
+        barcodeBuffer.current = '';
+        
+        // Find product by barcode
+        const product = products.find(p => p.barcode === barcode);
+        if (product) {
+          handleAddToCart(product);
+          toast({ title: 'Produit scanné', description: `${product.name} ajouté au panier` });
+        } else {
+          toast({ title: 'Produit non trouvé', description: `Code-barres: ${barcode}`, variant: 'destructive' });
+        }
+        return;
+      }
+
+      // Reset buffer after 100ms of no input (typical for manual typing, not scanner)
+      barcodeTimeout.current = setTimeout(() => {
+        barcodeBuffer.current = '';
+      }, 100);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (barcodeTimeout.current) {
+        clearTimeout(barcodeTimeout.current);
+      }
+    };
+  }, [products]);
+
+  // Handle barcode scan from camera
+  const handleBarcodeScan = useCallback((barcode: string) => {
+    const product = products.find(p => p.barcode === barcode);
+    if (product) {
+      handleAddToCart(product);
+      toast({ title: 'Produit scanné', description: `${product.name} ajouté au panier` });
+    } else {
+      toast({ title: 'Produit non trouvé', description: `Code-barres: ${barcode}`, variant: 'destructive' });
+    }
+    setScannerOpen(false);
+  }, [products]);
 
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -758,14 +883,31 @@ function POSSystem() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Products */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Rechercher un produit..."
-              className="pl-10"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                ref={barcodeInputRef}
+                placeholder="Rechercher ou scanner un code-barres..."
+                className="pl-10"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Button 
+              variant="outline" 
+              size="icon"
+              onClick={() => setScannerOpen(true)}
+              title="Scanner un code-barres"
+            >
+              <Scan className="h-5 w-5" />
+            </Button>
+          </div>
+          
+          {/* Scanner instructions */}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 p-2 rounded-lg">
+            <Barcode className="w-4 h-4" />
+            <span>Scanner USB: Branchez un scanner et scannez directement. Cliquez sur le bouton scan pour utiliser la caméra.</span>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
@@ -875,6 +1017,25 @@ function POSSystem() {
         open={receiptOpen} 
         onOpenChange={setReceiptOpen} 
       />
+      
+      {/* Barcode Scanner Dialog */}
+      <Dialog open={scannerOpen} onOpenChange={setScannerOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Scan className="w-5 h-5" />
+              Scanner un code-barres
+            </DialogTitle>
+            <DialogDescription>
+              Utilisez la caméra de votre appareil pour scanner un code-barres
+            </DialogDescription>
+          </DialogHeader>
+          <BarcodeScanner 
+            onScan={handleBarcodeScan}
+            onClose={() => setScannerOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

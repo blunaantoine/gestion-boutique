@@ -53,6 +53,7 @@ export interface Sale {
 // Storage keys
 const SERVER_URL_KEY = 'boutique-server-url';
 const USER_ID_KEY = 'boutique-user-id';
+const USER_DATA_KEY = 'boutique-user-data';
 
 // Generic API request function
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -107,6 +108,7 @@ export const db = {
       body: JSON.stringify({ phone, password, role: expectedRole }),
     });
     localStorage.setItem(USER_ID_KEY, data.user.id);
+    localStorage.setItem(USER_DATA_KEY, JSON.stringify(data.user));
     return data.user;
   },
 
@@ -116,17 +118,16 @@ export const db = {
       body: JSON.stringify({ name, phone, password, shopName }),
     });
     localStorage.setItem(USER_ID_KEY, data.user.id);
+    localStorage.setItem(USER_DATA_KEY, JSON.stringify(data.user));
     return data.user;
   },
 
-  getCurrentUser: async (): Promise<User | null> => {
-    const userId = localStorage.getItem(USER_ID_KEY);
-    if (!userId) return null;
+  getCurrentUser: (): User | null => {
+    if (typeof window === 'undefined') return null;
+    const userData = localStorage.getItem(USER_DATA_KEY);
+    if (!userData) return null;
     try {
-      const data = await apiRequest<{ user: User }>('/api/auth/me', {
-        headers: { 'x-user-id': userId },
-      });
-      return data.user;
+      return JSON.parse(userData);
     } catch {
       return null;
     }
@@ -134,6 +135,7 @@ export const db = {
 
   logout: () => {
     localStorage.removeItem(USER_ID_KEY);
+    localStorage.removeItem(USER_DATA_KEY);
   },
 
   resetPassword: async (_phone: string, _name: string, _newPassword: string): Promise<void> => {
@@ -285,7 +287,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   initApp: async () => {
     set({ isLoading: true });
     try {
-      const user = await db.getCurrentUser();
+      // Use synchronous getCurrentUser from localStorage
+      const user = db.getCurrentUser();
       set({ user, isLoading: false, isInitialized: true });
     } catch (error) {
       console.error('Init error:', error);

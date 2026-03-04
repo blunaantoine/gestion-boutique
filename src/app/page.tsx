@@ -30,45 +30,65 @@ import { Html5QrcodeScanner, Html5QrcodeScanType } from 'html5-qrcode';
 function BarcodeScanner({ onScan, onClose }: { onScan: (barcode: string) => void; onClose: () => void }) {
   const scannerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const scannerInstance = useRef<Html5QrcodeScanner | null>(null);
 
   useEffect(() => {
-    if (!scannerRef.current) return;
+    // Only run on client side
+    if (typeof window === 'undefined') return;
+    
+    // Wait for DOM to be ready
+    const timer = setTimeout(() => {
+      try {
+        const scanner = new Html5QrcodeScanner(
+          'barcode-scanner',
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 150 },
+            supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+            rememberLastUsedCamera: true,
+          },
+          false
+        );
 
-    const scanner = new Html5QrcodeScanner(
-      'barcode-scanner',
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 150 },
-        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-        rememberLastUsedCamera: true,
-      },
-      false
-    );
+        scannerInstance.current = scanner;
 
-    scanner.render(
-      (decodedText) => {
-        onScan(decodedText);
-        scanner.clear().catch(console.error);
-      },
-      (errorMessage) => {
-        // Ignore frequent errors, only show critical ones
-        if (errorMessage.includes('NotAllowedError')) {
-          setError('Accès à la caméra refusé. Veuillez autoriser l\'accès à la caméra.');
+        const renderResult = scanner.render(
+          (decodedText) => {
+            onScan(decodedText);
+            scanner.clear().catch(console.error);
+          },
+          (errorMessage) => {
+            // Ignore frequent errors, only show critical ones
+            if (typeof errorMessage === 'string' && errorMessage.includes('NotAllowedError')) {
+              setError('Accès à la caméra refusé. Veuillez autoriser l\'accès à la caméra.');
+            }
+          }
+        );
+
+        // Handle the promise if render returns one
+        if (renderResult && typeof renderResult.catch === 'function') {
+          renderResult.catch((err: Error) => {
+            setError('Impossible d\'accéder à la caméra. Vérifiez les permissions.');
+            console.error('Scanner error:', err);
+          });
         }
+      } catch (err) {
+        setError('Erreur lors de l\'initialisation du scanner.');
+        console.error('Scanner init error:', err);
       }
-    ).catch((err) => {
-      setError('Impossible d\'accéder à la caméra. Vérifiez les permissions.');
-      console.error('Scanner error:', err);
-    });
+    }, 100);
 
     return () => {
-      scanner.clear().catch(console.error);
+      clearTimeout(timer);
+      if (scannerInstance.current) {
+        scannerInstance.current.clear().catch(console.error);
+      }
     };
   }, [onScan]);
 
   return (
     <div className="space-y-4">
-      <div id="barcode-scanner" ref={scannerRef} className="w-full">
+      <div id="barcode-scanner" className="w-full min-h-[200px]">
         {/* Scanner will be rendered here */}
       </div>
       {error && (

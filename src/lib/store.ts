@@ -251,8 +251,10 @@ interface AppState {
   user: User | null;
   isLoading: boolean;
   isInitialized: boolean;
+  activeTab: string;
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
+  setActiveTab: (tab: string) => void;
   logout: () => void;
   initApp: () => Promise<void>;
   cart: CartItem[];
@@ -267,14 +269,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   user: null,
   isLoading: true,
   isInitialized: false,
+  activeTab: 'dashboard',
 
   setUser: (user) => set({ user, isLoading: false }),
 
   setLoading: (isLoading) => set({ isLoading }),
 
+  setActiveTab: (activeTab) => set({ activeTab }),
+
   logout: () => {
     db.logout();
-    set({ user: null, cart: [] });
+    set({ user: null, cart: [], activeTab: 'dashboard' });
   },
 
   initApp: async () => {

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import { db, User, Product, Sale, CartItem } from './api-client';
+import { User, Product, CartItem } from './api-client';
 
-// Re-export types
-export type { User, Product, Sale, CartItem } from './api-client';
+// Re-export everything from api-client
+export * from './api-client';
 
 interface AppState {
   // Auth
@@ -21,10 +21,6 @@ interface AppState {
   updateCartQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
   getCartTotal: () => number;
-
-  // UI
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -32,24 +28,31 @@ export const useAppStore = create<AppState>((set, get) => ({
   user: null,
   isLoading: true,
   isInitialized: false,
+
   setUser: (user) => set({ user, isLoading: false }),
-  setLoading: (loading) => set({ isLoading: loading }),
+
+  setLoading: (isLoading) => set({ isLoading }),
+
   logout: () => {
-    db.logout();
+    localStorage.removeItem('boutique-user-id');
     set({ user: null, cart: [] });
   },
+
   initApp: async () => {
+    set({ isLoading: true });
     try {
+      const { db } = await import('./api-client');
       const user = await db.getCurrentUser();
       set({ user, isLoading: false, isInitialized: true });
     } catch (error) {
-      console.error('Failed to initialize app:', error);
+      console.error('Init error:', error);
       set({ isLoading: false, isInitialized: true });
     }
   },
 
   // Cart
   cart: [],
+
   addToCart: (product, quantity = 1) => {
     const cart = get().cart;
     const existing = cart.find((item) => item.product.id === product.id);
@@ -66,9 +69,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ cart: [...cart, { product, quantity }] });
     }
   },
+
   removeFromCart: (productId) => {
     set({ cart: get().cart.filter((item) => item.product.id !== productId) });
   },
+
   updateCartQuantity: (productId, quantity) => {
     if (quantity <= 0) {
       get().removeFromCart(productId);
@@ -80,18 +85,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
     });
   },
+
   clearCart: () => set({ cart: [] }),
+
   getCartTotal: () => {
     return get().cart.reduce(
       (total, item) => total + item.product.salePrice * item.quantity,
       0
     );
   },
-
-  // UI
-  activeTab: 'dashboard',
-  setActiveTab: (tab) => set({ activeTab: tab }),
 }));
-
-// Export db for direct use
-export { db };

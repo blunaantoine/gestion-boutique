@@ -1,5 +1,5 @@
 // API Client for communicating with the server
-// Simple version - uses server API only
+// Works both locally (same origin) and remotely (different origin via WiFi)
 
 // Types
 export interface User {
@@ -82,11 +82,8 @@ async function apiRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const serverUrl = getServerUrl();
-  if (!serverUrl) {
-    throw new Error('Serveur non configuré');
-  }
-
-  const url = `${serverUrl}${endpoint}`;
+  // Use relative URL if no server configured (same origin)
+  const url = serverUrl ? `${serverUrl}${endpoint}` : endpoint;
   const userId = localStorage.getItem(USER_ID_KEY);
 
   const response = await fetch(url, {

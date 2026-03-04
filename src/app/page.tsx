@@ -1173,6 +1173,9 @@ function ProductsManagement() {
   const [saving, setSaving] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannedBarcode, setScannedBarcode] = useState<string>('');
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   const loadProducts = useCallback(async () => {
     if (!user) return;
@@ -1187,6 +1190,17 @@ function ProductsManagement() {
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);
+
+  // Handle barcode scan for product form
+  const handleBarcodeScanForProduct = useCallback((barcode: string) => {
+    setScannedBarcode(barcode);
+    setScannerOpen(false);
+    // Update the input field
+    if (barcodeInputRef.current) {
+      barcodeInputRef.current.value = barcode;
+    }
+    toast({ title: 'Code-barres scanné', description: `Code: ${barcode}` });
+  }, []);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<string | null> => {
     const file = e.target.files?.[0];
@@ -1345,7 +1359,24 @@ function ProductsManagement() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="barcode">Code-barres</Label>
-                  <Input id="barcode" name="barcode" defaultValue={editingProduct?.barcode || ''} />
+                  <div className="flex gap-2">
+                    <Input 
+                      ref={barcodeInputRef}
+                      id="barcode" 
+                      name="barcode" 
+                      defaultValue={editingProduct?.barcode || scannedBarcode} 
+                      className="flex-1"
+                    />
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => setScannerOpen(true)}
+                      title="Scanner un code-barres"
+                    >
+                      <Scan className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="category">Catégorie</Label>
@@ -1413,6 +1444,25 @@ function ProductsManagement() {
           ))}
         </div>
       )}
+      
+      {/* Barcode Scanner Dialog for Product Form */}
+      <Dialog open={scannerOpen} onOpenChange={setScannerOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Scan className="w-5 h-5" />
+              Scanner un code-barres
+            </DialogTitle>
+            <DialogDescription>
+              Utilisez la caméra pour scanner le code-barres du produit
+            </DialogDescription>
+          </DialogHeader>
+          <BarcodeScanner 
+            onScan={handleBarcodeScanForProduct}
+            onClose={() => setScannerOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

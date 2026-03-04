@@ -1630,6 +1630,217 @@ function Reports() {
 
   const availableYears = [new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1];
 
+  const shopName = user?.ownedShop?.name || user?.shop?.name || 'Ma Boutique';
+
+  const printDailyReport = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const dateFormatted = new Date(selectedDate).toLocaleDateString('fr-FR', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Rapport Journalier - ${shopName}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+          .header { text-align: center; border-bottom: 2px solid #10b981; padding-bottom: 15px; margin-bottom: 20px; }
+          .shop-name { font-size: 24px; font-weight: bold; color: #10b981; }
+          .report-title { font-size: 18px; color: #666; margin-top: 5px; }
+          .date { font-size: 14px; color: #888; margin-top: 5px; }
+          .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 20px 0; }
+          .stat-box { border: 1px solid #ddd; border-radius: 8px; padding: 15px; text-align: center; }
+          .stat-label { font-size: 12px; color: #666; text-transform: uppercase; }
+          .stat-value { font-size: 20px; font-weight: bold; margin-top: 5px; }
+          .stat-value.emerald { color: #10b981; }
+          .stat-value.teal { color: #14b8a6; }
+          .stat-value.orange { color: #f97316; }
+          .stat-value.blue { color: #3b82f6; }
+          .section { margin: 20px 0; }
+          .section-title { font-size: 16px; font-weight: bold; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+          .product-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
+          .product-name { font-weight: 500; }
+          .product-stats { text-align: right; }
+          .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #ddd; padding-top: 15px; }
+          @media print { body { padding: 10px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="shop-name">${shopName}</div>
+          <div class="report-title">RAPPORT JOURNALIER</div>
+          <div class="date">${dateFormatted}</div>
+        </div>
+        
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-label">Ventes</div>
+            <div class="stat-value emerald">${dailyReport?.totalSales || 0}</div>
+            <div style="font-size: 12px; color: #888;">${formatPrice(dailyReport?.totalRevenue || 0)}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Bénéfice</div>
+            <div class="stat-value teal">${formatPrice(dailyReport?.totalProfit || 0)}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Espèces</div>
+            <div class="stat-value orange">${formatPrice(dailyReport?.cashRevenue || 0)}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Mobile</div>
+            <div class="stat-value blue">${formatPrice(dailyReport?.mobileRevenue || 0)}</div>
+          </div>
+        </div>
+        
+        <div class="section">
+          <div class="section-title">Top Produits</div>
+          ${(dailyReport?.topProducts || []).slice(0, 10).map(p => `
+            <div class="product-row">
+              <span class="product-name">${p.name}</span>
+              <div class="product-stats">
+                <span style="color: #10b981; font-weight: 600;">${formatPrice(p.revenue)}</span>
+                <span style="color: #888; font-size: 12px;"> (${p.quantity} vendus)</span>
+              </div>
+            </div>
+          `).join('')}
+          ${(dailyReport?.topProducts || []).length === 0 ? '<div style="text-align: center; color: #888; padding: 20px;">Aucune vente ce jour</div>' : ''}
+        </div>
+        
+        <div class="footer">
+          <p>Rapport généré le ${new Date().toLocaleString('fr-FR')}</p>
+          <p>Imprimé par: ${user?.name || 'Utilisateur'}</p>
+        </div>
+        
+        <script>window.print(); window.close();</script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const printMonthlyReport = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const monthName = months.find(m => m.value === selectedMonth)?.label || '';
+    const dateFormatted = `${monthName} ${selectedYear}`;
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Rapport Mensuel - ${shopName}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+          .header { text-align: center; border-bottom: 2px solid #10b981; padding-bottom: 15px; margin-bottom: 20px; }
+          .shop-name { font-size: 24px; font-weight: bold; color: #10b981; }
+          .report-title { font-size: 18px; color: #666; margin-top: 5px; }
+          .date { font-size: 14px; color: #888; margin-top: 5px; }
+          .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 20px 0; }
+          .stat-box { border: 1px solid #ddd; border-radius: 8px; padding: 12px; text-align: center; }
+          .stat-label { font-size: 11px; color: #666; text-transform: uppercase; }
+          .stat-value { font-size: 18px; font-weight: bold; margin-top: 5px; }
+          .stat-value.emerald { color: #10b981; }
+          .stat-value.teal { color: #14b8a6; }
+          .stat-value.orange { color: #f97316; }
+          .stat-value.blue { color: #3b82f6; }
+          .section { margin: 20px 0; }
+          .section-title { font-size: 16px; font-weight: bold; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+          th { background: #f9fafb; font-weight: 600; }
+          .product-row { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; }
+          .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #ddd; padding-top: 15px; }
+          @media print { body { padding: 10px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="shop-name">${shopName}</div>
+          <div class="report-title">RAPPORT MENSUEL</div>
+          <div class="date">${dateFormatted}</div>
+        </div>
+        
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-label">Ventes</div>
+            <div class="stat-value emerald">${monthlyReport?.totalSales || 0}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Chiffre d'affaires</div>
+            <div class="stat-value emerald">${formatPrice(monthlyReport?.totalRevenue || 0)}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Bénéfice</div>
+            <div class="stat-value teal">${formatPrice(monthlyReport?.totalProfit || 0)}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Espèces</div>
+            <div class="stat-value orange">${formatPrice(monthlyReport?.cashRevenue || 0)}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Mobile</div>
+            <div class="stat-value blue">${formatPrice(monthlyReport?.mobileRevenue || 0)}</div>
+          </div>
+        </div>
+        
+        <div class="section">
+          <div class="section-title">Top Produits du Mois</div>
+          ${(monthlyReport?.topProducts || []).slice(0, 10).map(p => `
+            <div class="product-row">
+              <span style="font-weight: 500;">${p.name}</span>
+              <div>
+                <span style="color: #10b981; font-weight: 600;">${formatPrice(p.revenue)}</span>
+                <span style="color: #888; font-size: 12px;"> (${p.quantity} vendus)</span>
+              </div>
+            </div>
+          `).join('')}
+          ${(monthlyReport?.topProducts || []).length === 0 ? '<div style="text-align: center; color: #888; padding: 20px;">Aucune vente ce mois</div>' : ''}
+        </div>
+        
+        <div class="section">
+          <div class="section-title">Détail Journalier</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Ventes</th>
+                <th>Chiffre d'affaires</th>
+                <th>Bénéfice</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(monthlyReport?.dailyData || []).map(d => `
+                <tr>
+                  <td>${new Date(d.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</td>
+                  <td>${d.sales}</td>
+                  <td style="color: #10b981;">${formatPrice(d.revenue)}</td>
+                  <td style="color: #14b8a6;">${formatPrice(d.profit)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="footer">
+          <p>Moyenne journalière: ${formatPrice(monthlyReport?.averageDailyRevenue || 0)}</p>
+          <p>Rapport généré le ${new Date().toLocaleString('fr-FR')}</p>
+          <p>Imprimé par: ${user?.name || 'Utilisateur'}</p>
+        </div>
+        
+        <script>window.print(); window.close();</script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1651,9 +1862,15 @@ function Reports() {
         <>
           <Card>
             <CardContent className="py-4">
-              <div className="flex items-center gap-4">
-                <Label>Date:</Label>
-                <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-40" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <Label>Date:</Label>
+                  <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-40" />
+                </div>
+                <Button variant="outline" onClick={printDailyReport}>
+                  <Printer className="w-4 h-4 mr-2" />
+                  Imprimer
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -1709,23 +1926,29 @@ function Reports() {
         <>
           <Card>
             <CardContent className="py-4">
-              <div className="flex items-center gap-4">
-                <Select value={selectedMonth.toString()} onValueChange={(v) => setSelectedMonth(parseInt(v))}>
-                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {months.map((m) => (
-                      <SelectItem key={m.value} value={m.value.toString()}>{m.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(parseInt(v))}>
-                  <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {availableYears.map((y) => (
-                      <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-4">
+                  <Select value={selectedMonth.toString()} onValueChange={(v) => setSelectedMonth(parseInt(v))}>
+                    <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {months.map((m) => (
+                        <SelectItem key={m.value} value={m.value.toString()}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(parseInt(v))}>
+                    <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {availableYears.map((y) => (
+                        <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button variant="outline" onClick={printMonthlyReport}>
+                  <Printer className="w-4 h-4 mr-2" />
+                  Imprimer
+                </Button>
               </div>
             </CardContent>
           </Card>

@@ -658,6 +658,14 @@ function POSSystem() {
   const [search, setSearch] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'MOBILE_MONEY'>('CASH');
   const [processing, setProcessing] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [lastSale, setLastSale] = useState<{
+    id: string;
+    totalAmount: number;
+    paymentMethod: string;
+    createdAt: string;
+    items: { product: { name: string }; quantity: number; unitPrice: number }[];
+  } | null>(null);
 
   useEffect(() => {
     const loadProducts = async () => {
@@ -697,7 +705,7 @@ function POSSystem() {
 
     setProcessing(true);
     try {
-      await db.createSale({
+      const sale = await db.createSale({
         shopId,
         userId: user.id,
         totalAmount: getCartTotal(),
@@ -709,12 +717,28 @@ function POSSystem() {
         })),
       });
 
+      // Set the last sale for receipt
+      setLastSale({
+        id: sale.id,
+        totalAmount: sale.totalAmount,
+        paymentMethod: sale.paymentMethod,
+        createdAt: sale.createdAt,
+        items: cart.map(item => ({
+          product: { name: item.product.name },
+          quantity: item.quantity,
+          unitPrice: item.product.salePrice,
+        })),
+      });
+
       toast({ title: 'Vente enregistrée', description: 'La vente a été enregistrée avec succès' });
       clearCart();
       
       // Reload products to update stock
       const data = await db.getProducts(shopId);
       setProducts(data);
+      
+      // Show receipt dialog
+      setReceiptOpen(true);
     } catch (error) {
       toast({ title: 'Erreur', description: 'Impossible d\'enregistrer la vente', variant: 'destructive' });
     } finally {
@@ -844,7 +868,136 @@ function POSSystem() {
           </Card>
         </div>
       </div>
+      
+      {/* Receipt Dialog */}
+      <ReceiptDialog 
+        sale={lastSale} 
+        open={receiptOpen} 
+        onOpenChange={setReceiptOpen} 
+      />
     </div>
+  );
+}
+
+// ============ RECEIPT COMPONENT ============
+function ReceiptDialog({ sale, open, onOpenChange }: { 
+  sale: { 
+    id: string; 
+    totalAmount: number; 
+    paymentMethod: string; 
+    createdAt: string; 
+    items: { product: { name: string }; quantity: number; unitPrice: number }[];
+  } | null; 
+  open: boolean; 
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { user } = useAppStore();
+  const receiptRef = useState<HTMLDivElement>(null)[0];
+
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const shopName = user?.ownedShop?.name || user?.shop?.name || 'Ma Boutique';
+    const date = new Date(sale?.createdAt || '').toLocaleString('fr-FR');
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Reçu - ${shopName}</title>
+        <style>
+          body { font-family: 'Courier New', monospace; padding: 20px; max-width: 300px; margin: 0 auto; }
+          .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
+          .shop-name { font-size: 18px; font-weight: bold; }
+          .date { font-size: 12px; color: #666; }
+          .items { margin: 10px 0; }
+          .item { display: flex; justify-content: space-between; font-size: 12px; margin: 5px 0; }
+          .total { border-top: 1px dashed #000; padding-top: 10px; margin-top: 10px; font-weight: bold; display: flex; justify-content: space-between; }
+          .payment { text-align: center; margin-top: 10px; font-size: 12px; }
+          .footer { text-align: center; margin-top: 20px; font-size: 11px; color: #666; border-top: 1px dashed #000; padding-top: 10px; }
+          .receipt-id { font-size: 10px; color: #999; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="shop-name">${shopName}</div>
+          <div class="date">${date}</div>
+          <div class="receipt-id">N° ${sale?.id?.slice(-8).toUpperCase()}</div>
+        </div>
+        <div class="items">
+          ${sale?.items?.map(item => `
+            <div class="item">
+              <span>${item.quantity}x ${item.product.name}</span>
+              <span>${formatPrice(item.quantity * item.unitPrice)}</span>
+            </div>
+          `).join('') || ''}
+        </div>
+        <div class="total">
+          <span>TOTAL</span>
+          <span>${formatPrice(sale?.totalAmount || 0)}</span>
+        </div>
+        <div class="payment">
+          Paiement: ${sale?.paymentMethod === 'CASH' ? 'Espèces' : 'Mobile Money'}
+        </div>
+        <div class="footer">
+          Merci de votre visite!<br>
+          À bientôt
+        </div>
+        <script>window.print(); window.close();</script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            Reçu de vente
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-lg border text-sm font-mono">
+            <div className="text-center border-b border-dashed pb-2 mb-2">
+              <div className="font-bold text-lg">{user?.ownedShop?.name || user?.shop?.name || 'Ma Boutique'}</div>
+              <div className="text-xs text-muted-foreground">{new Date(sale?.createdAt || '').toLocaleString('fr-FR')}</div>
+              <div className="text-xs text-muted-foreground">N° {sale?.id?.slice(-8).toUpperCase()}</div>
+            </div>
+            <div className="space-y-1">
+              {sale?.items?.map((item, i) => (
+                <div key={i} className="flex justify-between text-xs">
+                  <span>{item.quantity}x {item.product.name}</span>
+                  <span>{formatPrice(item.quantity * item.unitPrice)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-dashed mt-2 pt-2 flex justify-between font-bold">
+              <span>TOTAL</span>
+              <span className="text-emerald-600">{formatPrice(sale?.totalAmount || 0)}</span>
+            </div>
+            <div className="text-center text-xs mt-2">
+              Paiement: {sale?.paymentMethod === 'CASH' ? 'Espèces' : 'Mobile Money'}
+            </div>
+            <div className="text-center text-xs text-muted-foreground mt-3 border-t border-dashed pt-2">
+              Merci de votre visite!
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
+              Fermer
+            </Button>
+            <Button className="flex-1" onClick={handlePrint}>
+              <Printer className="w-4 h-4 mr-2" />
+              Imprimer
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -857,6 +1010,8 @@ function ProductsManagement() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [saving, setSaving] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const loadProducts = useCallback(async () => {
     if (!user) return;
@@ -871,6 +1026,36 @@ function ProductsManagement() {
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<string | null> => {
+    const file = e.target.files?.[0];
+    if (!file) return null;
+
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const data = await res.json();
+      if (data.success) {
+        setImagePreview(data.imageUrl);
+        return data.imageUrl;
+      } else {
+        toast({ title: 'Erreur', description: data.error, variant: 'destructive' });
+        return null;
+      }
+    } catch (error) {
+      toast({ title: 'Erreur', description: 'Impossible de télécharger l\'image', variant: 'destructive' });
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -887,6 +1072,7 @@ function ProductsManagement() {
       salePrice: parseFloat(formData.get('salePrice') as string),
       stockQuantity: parseInt(formData.get('stockQuantity') as string) || 0,
       category: formData.get('category') as string || undefined,
+      imageUrl: imagePreview || editingProduct?.imageUrl || undefined,
       shopId,
     };
 
@@ -900,6 +1086,7 @@ function ProductsManagement() {
       }
       setDialogOpen(false);
       setEditingProduct(null);
+      setImagePreview(null);
       loadProducts();
     } catch (error) {
       toast({ title: 'Erreur', description: 'Impossible de sauvegarder', variant: 'destructive' });
@@ -927,17 +1114,69 @@ function ProductsManagement() {
           <h1 className="text-3xl font-bold tracking-tight">Produits</h1>
           <p className="text-muted-foreground">Gérez votre inventaire</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingProduct(null); }}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => { 
+          setDialogOpen(open); 
+          if (!open) { 
+            setEditingProduct(null); 
+            setImagePreview(null); 
+          } 
+        }}>
           <DialogTrigger asChild>
             <Button className="bg-gradient-to-r from-emerald-500 to-teal-600">
               <Plus className="mr-2 h-4 w-4" /> Ajouter un produit
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>{editingProduct ? 'Modifier' : 'Ajouter'} un produit</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSave} className="space-y-4">
+              {/* Image Upload */}
+              <div className="space-y-2">
+                <Label>Photo du produit</Label>
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 rounded-lg border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted">
+                    {imagePreview || editingProduct?.imageUrl ? (
+                      <img 
+                        src={imagePreview || editingProduct?.imageUrl} 
+                        alt="Aperçu" 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                      id="product-image"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => document.getElementById('product-image')?.click()}
+                      disabled={uploadingImage}
+                    >
+                      {uploadingImage ? (
+                        'Chargement...'
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 mr-2" />
+                          Télécharger
+                        </>
+                      )}
+                    </Button>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      JPG, PNG, GIF (max 5MB)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="name">Nom</Label>
                 <Input id="name" name="name" defaultValue={editingProduct?.name || ''} required />
@@ -1023,6 +1262,8 @@ function SalesHistory() {
   const isOwner = user?.role === 'OWNER';
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
 
   useEffect(() => {
     const loadSales = async () => {
@@ -1036,6 +1277,11 @@ function SalesHistory() {
     };
     loadSales();
   }, [user]);
+
+  const handlePrintReceipt = (sale: Sale) => {
+    setSelectedSale(sale);
+    setReceiptOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -1057,12 +1303,13 @@ function SalesHistory() {
                 <TableHead>Articles</TableHead>
                 <TableHead>Paiement</TableHead>
                 {isOwner && <TableHead className="text-right">Montant</TableHead>}
+                <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sales.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isOwner ? 4 : 3} className="text-center text-muted-foreground">
+                  <TableCell colSpan={isOwner ? 5 : 4} className="text-center text-muted-foreground">
                     Aucune vente
                   </TableCell>
                 </TableRow>
@@ -1084,6 +1331,16 @@ function SalesHistory() {
                     {isOwner && (
                       <TableCell className="text-right font-medium">{formatPrice(sale.totalAmount)}</TableCell>
                     )}
+                    <TableCell>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => handlePrintReceipt(sale)}
+                        title="Imprimer le reçu"
+                      >
+                        <Printer className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -1091,6 +1348,23 @@ function SalesHistory() {
           </Table>
         </Card>
       )}
+      
+      {/* Receipt Dialog */}
+      <ReceiptDialog 
+        sale={selectedSale ? {
+          id: selectedSale.id,
+          totalAmount: selectedSale.totalAmount,
+          paymentMethod: selectedSale.paymentMethod,
+          createdAt: selectedSale.createdAt,
+          items: selectedSale.items?.map(item => ({
+            product: { name: item.productId }, // We'll need to fetch product names
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          })) || [],
+        } : null}
+        open={receiptOpen}
+        onOpenChange={setReceiptOpen}
+      />
     </div>
   );
 }

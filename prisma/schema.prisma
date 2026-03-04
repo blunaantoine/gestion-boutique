@@ -1,0 +1,137 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  EMPLOYEE
+}
+
+enum PaymentMethod {
+  CASH
+  MOBILE_MONEY
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUSTMENT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  phone        String   @unique
+  passwordHash String
+  role         UserRole @default(EMPLOYEE)
+  shopId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedShop    Shop?    @relation("ShopOwner")
+  shop         Shop?    @relation("UserShop", fields: [shopId], references: [id])
+  sales        Sale[]
+
+  @@index([shopId])
+}
+
+model Shop {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner     User      @relation("ShopOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  employees User[]    @relation("UserShop")
+  products  Product[]
+  sales     Sale[]
+
+  @@index([ownerId])
+}
+
+model Product {
+  id             String   @id @default(cuid())
+  shopId         String
+  name           String
+  barcode        String?  @unique
+  purchasePrice  Float
+  salePrice      Float
+  stockQuantity  Int      @default(0)
+  category       String?
+  description    String?
+  imageUrl       String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  shop           Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  saleItems      SaleItem[]
+  stockMovements StockMovement[]
+
+  @@index([shopId])
+  @@index([barcode])
+  @@index([category])
+}
+
+model Sale {
+  id            String        @id @default(cuid())
+  shopId        String
+  userId        String
+  totalAmount   Float
+  paymentMethod PaymentMethod @default(CASH)
+  customerName  String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+
+  shop          Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id])
+  items         SaleItem[]
+
+  @@index([shopId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model SaleItem {
+  id         String  @id @default(cuid())
+  saleId     String
+  productId  String
+  quantity   Int
+  unitPrice  Float
+
+  sale       Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product    Product @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model StockMovement {
+  id          String             @id @default(cuid())
+  productId   String
+  type        StockMovementType
+  quantity    Int
+  reason      String?
+  userId      String?
+  createdAt   DateTime           @default(now())
+
+  product     Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([createdAt])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}

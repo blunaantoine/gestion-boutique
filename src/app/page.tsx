@@ -572,14 +572,14 @@ function AuthScreen() {
                   <Label htmlFor="phone">Numéro de téléphone</Label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input id="phone" name="phone" placeholder="+221 77 123 45 67" className="pl-10" required />
+                    <Input id="phone" name="phone" placeholder="+221 77 123 45 67" className="pl-10" required autoComplete="off" />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Mot de passe</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input id="password" name="password" type={showPassword ? "text" : "password"} className="pl-10 pr-10" required />
+                    <Input id="password" name="password" type={showPassword ? "text" : "password"} className="pl-10 pr-10" required autoComplete="off" />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-colors">
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -613,14 +613,14 @@ function AuthScreen() {
                     <Label htmlFor="phone">Numéro de téléphone</Label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input id="phone" name="phone" placeholder="+221 77 123 45 67" className="pl-10" required />
+                      <Input id="phone" name="phone" placeholder="+221 77 123 45 67" className="pl-10" required autoComplete="off" />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="password">Mot de passe</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input id="password" name="password" type={showPassword ? "text" : "password"} className="pl-10 pr-10" required />
+                      <Input id="password" name="password" type={showPassword ? "text" : "password"} className="pl-10 pr-10" required autoComplete="new-password" />
                       <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-colors">
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
@@ -2119,15 +2119,15 @@ function EmployeesManagement() {
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-2">
                 <Label>Nom</Label>
-                <Input name="name" required />
+                <Input name="name" required autoComplete="off" />
               </div>
               <div className="space-y-2">
                 <Label>Téléphone</Label>
-                <Input name="phone" required />
+                <Input name="phone" required autoComplete="off" />
               </div>
               <div className="space-y-2">
                 <Label>Mot de passe</Label>
-                <Input name="password" type="password" required />
+                <Input name="password" type="password" required autoComplete="new-password" />
               </div>
               <Button type="submit" className="w-full" disabled={saving}>
                 {saving ? 'Création...' : 'Créer'}

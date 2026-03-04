@@ -1,85 +1,55 @@
-import { NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+// GET - Get product by ID
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    }
-
     const { id } = await params;
     const product = await db.product.findUnique({
       where: { id },
-      include: {
-        stockMovements: {
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-        },
-      },
     });
 
     if (!product) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Produit non trouvé' },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({ product });
   } catch (error) {
     console.error('Get product error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Erreur lors de la récupération du produit' },
+      { status: 500 }
+    );
   }
 }
 
+// PUT - Update product
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    }
-
     const { id } = await params;
     const body = await request.json();
     const { name, barcode, purchasePrice, salePrice, stockQuantity, category, description, imageUrl, isActive } = body;
-
-    const existingProduct = await db.product.findUnique({
-      where: { id },
-    });
-
-    if (!existingProduct) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
-    }
-
-    // Check if barcode is being changed and conflicts
-    if (barcode && barcode !== existingProduct.barcode) {
-      const barcodeConflict = await db.product.findUnique({
-        where: { barcode },
-      });
-      if (barcodeConflict) {
-        return NextResponse.json(
-          { error: 'Product with this barcode already exists' },
-          { status: 400 }
-        );
-      }
-    }
 
     const product = await db.product.update({
       where: { id },
       data: {
         name,
-        barcode,
-        purchasePrice: purchasePrice !== undefined ? parseFloat(purchasePrice) : undefined,
-        salePrice: salePrice !== undefined ? parseFloat(salePrice) : undefined,
-        stockQuantity: stockQuantity !== undefined ? parseInt(stockQuantity) : undefined,
-        category,
-        description,
-        imageUrl,
+        barcode: barcode || null,
+        purchasePrice,
+        salePrice,
+        stockQuantity,
+        category: category || null,
+        description: description || null,
+        imageUrl: imageUrl || null,
         isActive,
       },
     });
@@ -87,31 +57,33 @@ export async function PUT(
     return NextResponse.json({ product });
   } catch (error) {
     console.error('Update product error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Erreur lors de la mise à jour du produit' },
+      { status: 500 }
+    );
   }
 }
 
+// DELETE - Delete product
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    }
-
     const { id } = await params;
 
-    // Soft delete by setting isActive to false
-    const product = await db.product.update({
+    // Soft delete
+    await db.product.update({
       where: { id },
       data: { isActive: false },
     });
 
-    return NextResponse.json({ product });
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Delete product error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Erreur lors de la suppression du produit' },
+      { status: 500 }
+    );
   }
 }

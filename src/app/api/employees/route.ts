@@ -1,47 +1,43 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 
-// GET - Liste des employés
-export async function GET() {
+// GET - List employees
+export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    
-    if (!user || user.role !== 'OWNER') {
+    const { searchParams } = new URL(request.url);
+    const shopId = searchParams.get('shopId');
+
+    if (!shopId) {
       return NextResponse.json(
-        { error: 'Accès non autorisé. Seul le gérant peut voir les employés.' },
-        { status: 403 }
+        { error: 'shopId requis' },
+        { status: 400 }
       );
     }
 
-    const shop = await db.shop.findUnique({
-      where: { ownerId: user.id },
-      include: {
-        employees: {
+    const employees = await db.user.findMany({
+      where: {
+        shopId,
+        role: 'EMPLOYEE',
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        role: true,
+        shopId: true,
+        createdAt: true,
+        shop: {
           select: {
             id: true,
             name: true,
-            phone: true,
-            role: true,
-            createdAt: true,
-            _count: {
-              select: { sales: true }
-            }
           },
-          orderBy: { createdAt: 'desc' }
-        }
-      }
+        },
+      },
+      orderBy: { name: 'asc' },
     });
 
-    if (!shop) {
-      return NextResponse.json(
-        { error: 'Boutique non trouvée' },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ employees: shop.employees });
+    return NextResponse.json({ employees });
   } catch (error) {
     console.error('Get employees error:', error);
     return NextResponse.json(
@@ -51,70 +47,56 @@ export async function GET() {
   }
 }
 
-// POST - Créer un nouvel employé
-export async function POST(request: Request) {
+// POST - Create employee
+export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    
-    if (!user || user.role !== 'OWNER') {
-      return NextResponse.json(
-        { error: 'Accès non autorisé. Seul le gérant peut créer des employés.' },
-        { status: 403 }
-      );
-    }
+    const body = await request.json();
+    const { name, phone, password, shopId } = body;
 
-    const { name, phone, password } = await request.json();
-
-    if (!name || !phone || !password) {
+    if (!name || !phone || !password || !shopId) {
       return NextResponse.json(
-        { error: 'Nom, téléphone et mot de passe sont requis' },
+        { error: 'Données incomplètes' },
         { status: 400 }
       );
     }
 
-    // Vérifier si le téléphone existe déjà
-    const existingUser = await db.user.findUnique({
-      where: { phone }
+    // Check if phone already exists
+    const existing = await db.user.findUnique({
+      where: { phone },
     });
 
-    if (existingUser) {
+    if (existing) {
       return NextResponse.json(
         { error: 'Ce numéro de téléphone est déjà utilisé' },
         { status: 400 }
       );
     }
 
-    // Récupérer la boutique du gérant
-    const shop = await db.shop.findUnique({
-      where: { ownerId: user.id }
-    });
-
-    if (!shop) {
-      return NextResponse.json(
-        { error: 'Boutique non trouvée' },
-        { status: 404 }
-      );
-    }
-
-    // Hasher le mot de passe
+    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Créer l'employé
     const employee = await db.user.create({
       data: {
         name,
         phone,
         passwordHash,
         role: 'EMPLOYEE',
-        shopId: shop.id
+        shopId,
       },
       select: {
         id: true,
         name: true,
         phone: true,
         role: true,
-        createdAt: true
-      }
+        shopId: true,
+        createdAt: true,
+        shop: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
     });
 
     return NextResponse.json({ employee });

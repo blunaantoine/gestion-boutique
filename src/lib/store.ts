@@ -1,61 +1,23 @@
 import { create } from 'zustand';
+import { db, User, Product, Sale } from './api-client';
 
-export interface User {
-  id: string;
-  name: string;
-  phone: string;
-  role: 'OWNER' | 'EMPLOYEE';
-  shopId: string | null;
-  shop: { id: string; name: string } | null;
-  ownedShop: { id: string; name: string } | null;
-}
-
-export interface Product {
-  id: string;
-  shopId: string;
-  name: string;
-  barcode: string | null;
-  purchasePrice: number;
-  salePrice: number;
-  stockQuantity: number;
-  category: string | null;
-  description: string | null;
-  imageUrl: string | null;
-  isActive: boolean;
-  createdAt: string;
-}
+// Re-export types
+export type { User, Product, Sale, CartItem } from './api-client';
 
 export interface CartItem {
   product: Product;
   quantity: number;
 }
 
-export interface Sale {
-  id: string;
-  shopId: string;
-  userId: string;
-  totalAmount: number;
-  paymentMethod: 'CASH' | 'MOBILE_MONEY';
-  customerName: string | null;
-  notes: string | null;
-  createdAt: string;
-  items: {
-    id: string;
-    productId: string;
-    quantity: number;
-    unitPrice: number;
-    product: Product;
-  }[];
-  user: { id: string; name: string };
-}
-
 interface AppState {
   // Auth
   user: User | null;
   isLoading: boolean;
+  isInitialized: boolean;
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
   logout: () => void;
+  initApp: () => Promise<void>;
 
   // Cart
   cart: CartItem[];
@@ -74,11 +36,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Auth
   user: null,
   isLoading: true,
+  isInitialized: false,
   setUser: (user) => set({ user, isLoading: false }),
   setLoading: (loading) => set({ isLoading: loading }),
-  logout: async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+  logout: () => {
+    db.logout();
     set({ user: null, cart: [] });
+  },
+  initApp: async () => {
+    try {
+      await db.init();
+      const user = await db.getCurrentUser();
+      set({ user, isLoading: false, isInitialized: true });
+    } catch (error) {
+      console.error('Failed to initialize app:', error);
+      set({ isLoading: false, isInitialized: true });
+    }
   },
 
   // Cart
@@ -125,3 +98,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeTab: 'dashboard',
   setActiveTab: (tab) => set({ activeTab: tab }),
 }));
+
+// Export db for direct use
+export { db };

@@ -1,84 +1,83 @@
-import { NextResponse } from 'next/server';
-import { createUser, setCurrentUser } from '@/lib/auth';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import bcrypt from 'bcryptjs';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, phone, password, role, shopName } = body;
+    const { name, phone, password, shopName } = body;
 
     if (!name || !phone || !password) {
       return NextResponse.json(
-        { error: 'Name, phone, and password are required' },
+        { error: 'Nom, numéro de téléphone et mot de passe requis' },
         { status: 400 }
       );
     }
 
     // Check if phone already exists
-    const existingUser = await db.user.findUnique({
+    const existing = await db.user.findUnique({
       where: { phone },
     });
 
-    if (existingUser) {
+    if (existing) {
       return NextResponse.json(
-        { error: 'Phone number already registered' },
+        { error: 'Ce numéro de téléphone est déjà utilisé' },
         { status: 400 }
       );
     }
 
-    // If registering as OWNER, create a shop
-    if (role === 'OWNER') {
-      if (!shopName) {
-        return NextResponse.json(
-          { error: 'Shop name is required for owners' },
-          { status: 400 }
-        );
-      }
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
 
-      // Create user and shop in transaction
-      const user = await createUser({
-        name,
-        phone,
-        password,
-        role: 'OWNER',
+    // Create user and shop in transaction
+    const result = await db.$transaction(async (tx) => {
+      // Create user
+      const user = await tx.user.create({
+        data: {
+          name,
+          phone,
+          passwordHash,
+          role: 'OWNER',
+        },
       });
 
-      const shop = await db.shop.create({
+      // Create shop
+      const shop = await tx.shop.create({
         data: {
-          name: shopName,
+          name: shopName || 'Ma Boutique',
           ownerId: user.id,
         },
       });
 
-      // Update user with shopId
-      const updatedUser = await db.user.update({
+      // Update user with shop
+      const updatedUser = await tx.user.update({
         where: { id: user.id },
         data: { shopId: shop.id },
-        include: { shop: true, ownedShop: true },
+        include: {
+          ownedShop: true,
+          shop: true,
+        },
       });
 
-      await setCurrentUser(user.id);
-
-      const { passwordHash, ...userWithoutPassword } = updatedUser;
-      return NextResponse.json({ user: userWithoutPassword, shop });
-    }
-
-    // Register as employee
-    const user = await createUser({
-      name,
-      phone,
-      password,
-      role: 'EMPLOYEE',
+      return updatedUser;
     });
 
-    await setCurrentUser(user.id);
+    // Return user data
+    const userData = {
+      id: result.id,
+      name: result.name,
+      phone: result.phone,
+      role: result.role,
+      shopId: result.shopId,
+      shop: result.shop ? { id: result.shop.id, name: result.shop.name } : null,
+      ownedShop: result.ownedShop ? { id: result.ownedShop.id, name: result.ownedShop.name } : null,
+    };
 
-    const { passwordHash, ...userWithoutPassword } = user;
-    return NextResponse.json({ user: userWithoutPassword });
+    return NextResponse.json({ user: userData });
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Register error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Erreur lors de l\'inscription' },
       { status: 500 }
     );
   }

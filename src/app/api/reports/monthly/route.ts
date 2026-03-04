@@ -1,22 +1,23 @@
-import { NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-export async function GET(request: Request) {
+// GET - Monthly report
+export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    }
-
-    const shopId = user.ownedShop?.id || user.shop?.id;
-    if (!shopId) {
-      return NextResponse.json({ error: 'No shop associated' }, { status: 400 });
-    }
-
     const { searchParams } = new URL(request.url);
-    const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
-    const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString());
+    const shopId = searchParams.get('shopId');
+    const monthStr = searchParams.get('month');
+    const yearStr = searchParams.get('year');
+
+    if (!shopId) {
+      return NextResponse.json(
+        { error: 'shopId requis' },
+        { status: 400 }
+      );
+    }
+
+    const month = monthStr ? parseInt(monthStr) : new Date().getMonth() + 1;
+    const year = yearStr ? parseInt(yearStr) : new Date().getFullYear();
 
     const startOfMonth = new Date(year, month - 1, 1);
     const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
@@ -39,89 +40,78 @@ export async function GET(request: Request) {
       },
     });
 
-    // Calculate metrics
-    const totalSales = sales.length;
-    const totalRevenue = sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
-
-    // Calculate profit
+    let totalRevenue = 0;
     let totalProfit = 0;
-    for (const sale of sales) {
-      for (const item of sale.items) {
-        totalProfit += (item.unitPrice - item.product.purchasePrice) * item.quantity;
-      }
-    }
+    let cashRevenue = 0;
+    let mobileRevenue = 0;
+    const productStats: Record<string, { name: string; quantity: number; revenue: number }> = {};
 
-    // Daily breakdown
+    // Daily data
     const daysInMonth = new Date(year, month, 0).getDate();
     const dailyData: { date: string; revenue: number; sales: number; profit: number }[] = [];
 
     for (let day = 1; day <= daysInMonth; day++) {
-      const dayStart = new Date(year, month - 1, day);
-      const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
-
-      const daySales = sales.filter((s) => {
-        const saleDate = new Date(s.createdAt);
-        return saleDate >= dayStart && saleDate <= dayEnd;
-      });
-
-      let dayProfit = 0;
-      for (const sale of daySales) {
-        for (const item of sale.items) {
-          dayProfit += (item.unitPrice - item.product.purchasePrice) * item.quantity;
-        }
-      }
-
       dailyData.push({
         date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
-        revenue: daySales.reduce((sum, s) => sum + s.totalAmount, 0),
-        sales: daySales.length,
-        profit: dayProfit,
+        revenue: 0,
+        sales: 0,
+        profit: 0,
       });
     }
 
-    // Payment method breakdown
-    const cashRevenue = sales
-      .filter((s) => s.paymentMethod === 'CASH')
-      .reduce((sum, s) => sum + s.totalAmount, 0);
-    const mobileRevenue = sales
-      .filter((s) => s.paymentMethod === 'MOBILE_MONEY')
-      .reduce((sum, s) => sum + s.totalAmount, 0);
-
-    // Top products
-    const productSales: Record<string, { name: string; quantity: number; revenue: number }> = {};
     for (const sale of sales) {
+      totalRevenue += sale.totalAmount;
+
+      if (sale.paymentMethod === 'CASH') {
+        cashRevenue += sale.totalAmount;
+      } else {
+        mobileRevenue += sale.totalAmount;
+      }
+
+      const saleDate = new Date(sale.createdAt);
+      const dayIndex = saleDate.getDate() - 1;
+      if (dailyData[dayIndex]) {
+        dailyData[dayIndex].revenue += sale.totalAmount;
+        dailyData[dayIndex].sales += 1;
+      }
+
       for (const item of sale.items) {
-        if (!productSales[item.productId]) {
-          productSales[item.productId] = {
+        const profit = (item.unitPrice - item.product.purchasePrice) * item.quantity;
+        totalProfit += profit;
+
+        if (dailyData[dayIndex]) {
+          dailyData[dayIndex].profit += profit;
+        }
+
+        if (!productStats[item.productId]) {
+          productStats[item.productId] = {
             name: item.product.name,
             quantity: 0,
             revenue: 0,
           };
         }
-        productSales[item.productId].quantity += item.quantity;
-        productSales[item.productId].revenue += item.unitPrice * item.quantity;
+        productStats[item.productId].quantity += item.quantity;
+        productStats[item.productId].revenue += item.unitPrice * item.quantity;
       }
     }
 
-    const topProducts = Object.values(productSales)
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 10);
-
-    return NextResponse.json({
-      month: `${year}-${String(month).padStart(2, '0')}`,
-      summary: {
-        totalSales,
-        totalRevenue,
-        totalProfit,
-        cashRevenue,
-        mobileRevenue,
-        averageDailyRevenue: totalRevenue / daysInMonth,
-      },
+    const report = {
+      totalSales: sales.length,
+      totalRevenue,
+      totalProfit,
+      cashRevenue,
+      mobileRevenue,
+      averageDailyRevenue: totalRevenue / daysInMonth,
       dailyData,
-      topProducts,
-    });
+      topProducts: Object.values(productStats).sort((a, b) => b.revenue - a.revenue),
+    };
+
+    return NextResponse.json({ report });
   } catch (error) {
-    console.error('Monthly report error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Get monthly report error:', error);
+    return NextResponse.json(
+      { error: 'Erreur lors de la récupération du rapport' },
+      { status: 500 }
+    );
   }
 }

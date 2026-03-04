@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -13,11 +13,53 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#10b981" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
+  ],
+};
+
 export const metadata: Metadata = {
-  title: "Shop Management - Gestion de Boutique",
-  description: "Comprehensive shop management system with inventory, sales, and analytics",
-  keywords: ["Shop Management", "POS", "Inventory", "Sales", "Analytics"],
+  title: "Gestion de Boutique",
+  shortName: "Boutique",
+  description: "Application de gestion de boutique - Caisse, produits, ventes et rapports",
+  keywords: ["Boutique", "Gestion", "POS", "Caisse", "Ventes", "Inventaire"],
   authors: [{ name: "Z.ai Team" }],
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Gestion de Boutique",
+  },
+  formatDetection: {
+    telephone: true,
+  },
+  openGraph: {
+    type: "website",
+    siteName: "Gestion de Boutique",
+    title: "Gestion de Boutique",
+    description: "Application de gestion de boutique - Caisse, produits, ventes et rapports",
+  },
+  twitter: {
+    card: "summary",
+    title: "Gestion de Boutique",
+    description: "Application de gestion de boutique",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/icons/icon-152x152.png", sizes: "152x152", type: "image/png" },
+      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+    ],
+  },
 };
 
 export default function RootLayout({
@@ -26,7 +68,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="fr" suppressHydrationWarning>
+      <head>
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="mobile-web-app-capable" content="yes" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >

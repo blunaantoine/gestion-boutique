@@ -28,13 +28,20 @@ import { Html5QrcodeScanner, Html5QrcodeScanType } from 'html5-qrcode';
 
 // ============ BARCODE SCANNER COMPONENT ============
 function BarcodeScanner({ onScan, onClose }: { onScan: (barcode: string) => void; onClose: () => void }) {
-  const scannerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [manualBarcode, setManualBarcode] = useState('');
   const scannerInstance = useRef<Html5QrcodeScanner | null>(null);
+  
+  // Check if camera is available (secure context) - computed during render, not in effect
+  const canUseCamera = typeof window !== 'undefined' && (
+    window.location.protocol === 'https:' || 
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1'
+  );
 
   useEffect(() => {
-    // Only run on client side
-    if (typeof window === 'undefined') return;
+    // Only run on client side or if camera is available
+    if (typeof window === 'undefined' || !canUseCamera) return;
     
     // Wait for DOM to be ready
     const timer = setTimeout(() => {
@@ -84,20 +91,56 @@ function BarcodeScanner({ onScan, onClose }: { onScan: (barcode: string) => void
         scannerInstance.current.clear().catch(console.error);
       }
     };
-  }, [onScan]);
+  }, [onScan, canUseCamera]);
+
+  const handleManualSubmit = () => {
+    if (manualBarcode.trim()) {
+      onScan(manualBarcode.trim());
+    }
+  };
 
   return (
     <div className="space-y-4">
-      <div id="barcode-scanner" className="w-full min-h-[200px]">
-        {/* Scanner will be rendered here */}
-      </div>
+      {/* Scanner container - only show if camera is available */}
+      {canUseCamera && (
+        <div id="barcode-scanner" className="w-full min-h-[200px]">
+          {/* Scanner will be rendered here */}
+        </div>
+      )}
+      
+      {!canUseCamera && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg text-amber-700 dark:text-amber-400 text-sm">
+          <p className="font-medium mb-2">⚠️ Scanner caméra non disponible</p>
+          <p>La caméra nécessite une connexion sécurisée (HTTPS ou localhost). Utilisez le scanner USB ou entrez le code manuellement.</p>
+        </div>
+      )}
+      
       {error && (
         <div className="p-4 bg-red-50 dark:bg-red-950/30 rounded-lg text-red-700 dark:text-red-400 text-sm">
           {error}
         </div>
       )}
+      
+      {/* Manual entry fallback */}
+      <div className="space-y-2">
+        <Label htmlFor="manual-barcode">Entrer le code-barres manuellement</Label>
+        <div className="flex gap-2">
+          <Input 
+            id="manual-barcode"
+            value={manualBarcode}
+            onChange={(e) => setManualBarcode(e.target.value)}
+            placeholder="Ex: 3017620422003"
+            className="flex-1"
+            onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
+          />
+          <Button onClick={handleManualSubmit} disabled={!manualBarcode.trim()}>
+            OK
+          </Button>
+        </div>
+      </div>
+      
       <p className="text-xs text-muted-foreground text-center">
-        Pointez la caméra vers le code-barres du produit
+        💡 Astuce: Un scanner USB fonctionne automatiquement sans caméra
       </p>
     </div>
   );
